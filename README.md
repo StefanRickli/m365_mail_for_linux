@@ -1,11 +1,20 @@
-# m365_mail_for_linux
-PoC to send mails from a M365 account
+# Basic M365 E-Mail Support on Linux
 
 This will enable applications like `unattended-upgrades` or `raspiBackup` to send mails from a specific e-mail account that lives in the Microsoft 365 world (Office 365 Exchange).
 
-# Installation
+We use Microsoft Graph API using a local PowerShell installation, and a shim for `/usr/bin/mail`.
 
 **WE WILL REPLACE YOUR INSTALLED VERSION OF `/usr/bin/mail`, make sure that it does not exist yet.**
+
+Tested on a Raspberry Pi (Debian-based).
+
+# Disclaimer
+
+The scripts are a quick-and-dirty implementation. Use them (and the commands below) at your own discretion.
+
+I used a lot of trial-and-error, and used ChatGPT a lot to get the scripts going. The below steps are a reconstruction from memory to hopefully create a hitch-free installation, so I cannot guarantee that everything is complete.
+
+# Installation
 
 ## Prepare App on Azure
 
