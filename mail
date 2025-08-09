@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# /etc/usr/local/bin/mail
+
+set -euo pipefail
+
+subject=""
+
+# gather recipients
+recips=()
+while (( "$#" )); do
+  case "$1" in
+    -s) subject="$2"; shift 2 ;;
+    -r) shift 2 ;;                  # skip "-r <arg>"
+    --) shift; break ;;
+    -*) shift ;;                    # ignore any other unsupported flags (no value)
+    *)  recips+=("$1"); shift ;;
+  esac
+done
+recips+=("$@")  # just in case
+
+body="$(cat)"
+
+# join with commas for PS array param
+printf -v joined '%s,' "${recips[@]}"
+joined="${joined%,}"   # trim trailing comma
+
+/usr/bin/pwsh -File /usr/local/bin/graph-mail.ps1 \
+  -To "$joined" \
+  -Subject "$subject" <<<"$body"
