@@ -30,6 +30,7 @@ This will enable applications like `unattended-upgrades` or `raspiBackup` to sen
     - `tar -xvf powershell-7.5.2-linux-arm64.tar.gz -C /opt/microsoft/powershell/7.5.2`
     - `ln -s /opt/microsoft/powershell/7.5.2/pwsh /usr/bin/pwsh`
 - In a root shell:
+  - `which mail` **ABORT IF IT RETURNS SOMETHING** (because we will replace it)
   - `cp graph-mail.env.sample /etc/graph-mail.env`
   - `nano /etc/graph-mail.env`, put in your info from above
   - `chmod 600 /etc/graph-mail.env`
