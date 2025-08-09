@@ -39,9 +39,9 @@ I used a lot of trial-and-error, and used ChatGPT a lot to get the scripts going
     - `release=$(curl -sL https://api.github.com/repos/PowerShell/PowerShell/releases/latest)`
     - `package=$(echo $release | jq -r ".assets[].browser_download_url" | grep "linux-arm${bits}.tar.gz")`
     - `wget $package`
-    - `mkdir -p /opt/microsoft/powershell/$release`
-    - `tar -xvf $package -C /opt/microsoft/powershell/$release`
-    - `ln -s /opt/microsoft/powershell/$release/pwsh /usr/bin/pwsh`
+    - `mkdir -p /opt/microsoft/powershell/<ps_version>`
+    - `tar -xvf $package -C /opt/microsoft/powershell/<ps_version>`
+    - `ln -s /opt/microsoft/powershell/<ps_version>/pwsh /usr/bin/pwsh`
 - In a root shell (`sudo su`):
   - `which mail` **ABORT IF IT RETURNS SOMETHING** (because we will replace it)
   - `cp graph-mail.env.sample /etc/graph-mail.env`
