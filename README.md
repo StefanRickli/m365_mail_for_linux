@@ -88,14 +88,7 @@ pwsh --version
 
 4. **Install the scripts**
 
-```bash
-sudo curl -o /usr/local/bin/mail \
-  https://raw.githubusercontent.com/StefanRickli/m365_mail_for_linux/main/mail
-sudo curl -o /usr/local/bin/graph-mail.ps1 \
-  https://raw.githubusercontent.com/StefanRickli/m365_mail_for_linux/main/graph-mail.ps1
-sudo chmod +x /usr/local/bin/mail
-sudo ln -sf /usr/local/bin/mail /usr/bin/mail
-```
+Same procedure as above.
 
 > Tip: For 32‑bit Pi OS, download the `arm32`/`armhf` tarball instead; the rest stays the same. ARM on Debian is **community supported** via tarball.
 
