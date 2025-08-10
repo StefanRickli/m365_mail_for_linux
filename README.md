@@ -1,54 +1,195 @@
-# Basic M365 E-Mail Support on Linux
+# Basic M365 E‑Mail Support on Linux
 
-This will enable applications like `unattended-upgrades` or `raspiBackup` to send mails from a specific e-mail account that lives in the Microsoft 365 world (Office 365 Exchange).
+Send Microsoft 365 (Exchange Online) mail from a Linux box with **no local SMTP server** and **no interactive login**. This project wires a lightweight `mail` wrapper to a PowerShell script that calls the Microsoft Graph `sendMail` endpoint using **app‑only (client credentials) OAuth2**. Result: your cron jobs, unattended‑upgrades, backup scripts, etc., can deliver notifications through your M365 tenant reliably.
 
-We use Microsoft Graph API using a local PowerShell installation, and a shim for `/usr/bin/mail`.
+---
 
-**WE WILL REPLACE YOUR INSTALLED VERSION OF `/usr/bin/mail`, make sure that it does not exist yet.**
+## Why this is needed (the pain it solves)
 
-Tested on a Raspberry Pi (Debian-based).
+- Microsoft is retiring **Basic auth** for SMTP Client Submission; tenants are expected to use **OAuth** or Graph. Many orgs already block basic auth entirely. Traditional `mailx`/`sendmail` flows break in such environments.
+- Non‑interactive OAuth for SMTP is awkward; using **Graph app‑only** is the robust path for headless servers.
+- This repo gives you a drop‑in `mail` command that talks Graph under the hood.
 
-# Disclaimer
+> TL;DR: Getting M365 mail sending to work on Linux is notoriously fiddly. This project standardizes the setup and makes it repeatable and auditable.
 
-The scripts are a quick-and-dirty implementation. Use them (and the commands below) at your own discretion.
+---
 
-I used a lot of trial-and-error, and used ChatGPT a lot to get the scripts going. The below steps are a reconstruction from memory to hopefully create a hitch-free installation, so I cannot guarantee that everything is complete.
+## How it works
 
-# Installation
+- **`mail` wrapper**: a tiny Bash script that mimics the standard `mail` command, collects `-s "Subject"` and recipients, reads the body from `stdin`, and invokes the PowerShell sender.
+- `graph-mail.ps1`: runs in PowerShell Core, obtains an app‑only access token (client ID/secret, tenant ID) and posts to Microsoft Graph `sendMail` for the configured **sender mailbox**.
+- Reads configuration from `/etc/graph-mail.env` for credentials and sender address.
+- **No local MTA**: Nothing listens on port 25; messages go straight to Exchange Online over HTTPS.
 
-## Prepare App on Azure
+### What you get
 
-- Go to https://entra.microsoft.com/
-- Home > Note "Tenant ID": `TENANT_ID`
-- App registrations > New Registration, give it a good name
-- Overview > Note the "Application (client) ID": `APPLICATION_ID`
-- API permission > Add a permission > Microsoft Graph: Application permissions: Mail.Send
-- Grant admin consent for (tenant name)
-- Certificates & secrets > Client secrets > New client secret > Name it anythin you like, note the "Value": `CLIENT_SECRET`
-- In a PowerShell Terminal:
-  - `Install-Module -Name ExchangeOnlineManagement`
-  - `New-ApplicationAccessPolicy -AppId "<APPLICATION_ID>" -PolicyScopeGroupId "my_mail@example.com" -AccessRight RestrictAccess -Description "Allow GraphMail app to send as my mailbox only"`
-  - `Test-ApplicationAccessPolicy -Identity "my_mail@example.com" -AppId "<APPLICATION_ID>"`
+- Works with any tool that pipes to `mail`.
+- Plain‑text body out of the box (switchable to HTML in the PS script).
+- Defaults to **not** saving to Sent Items (toggleable).
 
+---
 
-## On Linux Machine
+## Installation (choose your path)
 
-- Install PowerShell globally:
-  - Untar into `/opt/microsoft/powershell/<version>`, e.g.:
-    - `bits=$(getconf LONG_BIT)`
-    - `release=$(curl -sL https://api.github.com/repos/PowerShell/PowerShell/releases/latest)`
-    - `package=$(echo $release | jq -r ".assets[].browser_download_url" | grep "linux-arm${bits}.tar.gz")`
-    - `wget $package`
-    - `mkdir -p /opt/microsoft/powershell/<ps_version>`
-    - `tar -xvf $package -C /opt/microsoft/powershell/<ps_version>`
-    - `chmod +x /opt/microsoft/powershell/<ps_version>/pwsh`
-    - `ln -s /opt/microsoft/powershell/<ps_version>/pwsh /usr/bin/pwsh`
-- In a root shell (`sudo su`):
-  - `which mail` **ABORT IF IT RETURNS SOMETHING** (because we will replace it)
-  - `cp graph-mail.env.sample /etc/graph-mail.env`
-  - `nano /etc/graph-mail.env`, put in your info from above
-  - `chmod 600 /etc/graph-mail.env`
-  - `cp mail /usr/local/bin/mail`
-  - `cp graph-mail /usr/local/bin/graph-mail`
-  - `chmod +x /usr/local/bin/mail /usr/local/bin/graph-mail`
-  - Test: `echo "Hello World from the Mail shim" | mail -s "Test Subject" my_mail@example.com`
+### A) Debian/Ubuntu on **amd64** (easy path)
+
+1. **Find latest PowerShell version**
+
+```bash
+curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep tag_name
+```
+
+Note the latest version number (e.g. `v7.4.5`) and strip the leading `v` for use in the next step.
+
+2. **Install PowerShell 7** from Microsoft’s repo
+
+```bash
+sudo apt-get update
+sudo apt-get install -y wget apt-transport-https software-properties-common
+wget -q https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+sudo dpkg -i packages-microsoft-prod.deb
+sudo apt-get update
+sudo apt-get install -y powershell   # provides /usr/bin/pwsh
+pwsh --version
+```
+
+3. **Install the scripts**
+
+```bash
+sudo curl -o /usr/local/bin/mail \
+  https://raw.githubusercontent.com/StefanRickli/m365_mail_for_linux/main/mail
+sudo curl -o /usr/local/bin/graph-mail.ps1 \
+  https://raw.githubusercontent.com/StefanRickli/m365_mail_for_linux/main/graph-mail.ps1
+sudo chmod +x /usr/local/bin/mail
+```
+
+4. **Make it the default `mail`**
+
+Remove/rename any existing `/usr/bin/mail` (from `mailutils`/`bsd-mailx`), then:
+
+```bash
+sudo ln -sf /usr/local/bin/mail /usr/bin/mail
+```
+
+---
+
+### B) Raspberry Pi / Debian on **ARM** (manual path)
+
+Microsoft doesn’t publish official Debian ARM `.deb` packages for PowerShell. Install from the **binary tarball** and symlink `pwsh`:
+
+1. **Find latest PowerShell version**
+
+```bash
+curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep tag_name
+```
+
+Note the latest version number (e.g. `v7.4.5`) and strip the leading `v` for use in the next step.
+
+2. **Download the correct tarball** (arm64 for 64‑bit Pi OS; arm32/armhf for 32‑bit):
+
+```bash
+PWVER=7.4.5
+curl -L -o powershell-linux-arm64.tar.gz \
+  https://github.com/PowerShell/PowerShell/releases/download/v$PWVER/powershell-$PWVER-linux-arm64.tar.gz
+```
+
+3. **Install to /opt and link**
+
+```bash
+sudo mkdir -p /opt/microsoft/powershell/$PWVER
+sudo tar -xzf powershell-linux-arm64.tar.gz -C /opt/microsoft/powershell/$PWVER
+sudo ln -sf /opt/microsoft/powershell/$PWVER/pwsh /usr/bin/pwsh
+pwsh --version
+```
+
+4. **Install the scripts**
+
+```bash
+sudo curl -o /usr/local/bin/mail \
+  https://raw.githubusercontent.com/StefanRickli/m365_mail_for_linux/main/mail
+sudo curl -o /usr/local/bin/graph-mail.ps1 \
+  https://raw.githubusercontent.com/StefanRickli/m365_mail_for_linux/main/graph-mail.ps1
+sudo chmod +x /usr/local/bin/mail
+sudo ln -sf /usr/local/bin/mail /usr/bin/mail
+```
+
+> Tip: For 32‑bit Pi OS, download the `arm32`/`armhf` tarball instead; the rest stays the same. ARM on Debian is **community supported** via tarball.
+
+---
+
+## Azure / M365 setup (what we’re doing and why)
+
+**Goal**: Let a headless server send mail through Exchange Online using **Graph application permissions** (no user sign‑in), **scoped to one mailbox** for least privilege.
+
+1. **App Registration** (Microsoft Entra ID → App registrations)
+
+- Note **Directory (Tenant) ID** and **Application (Client) ID**.
+- Create a **Client Secret** (store the value now).
+- **API permissions** → **Microsoft Graph** → **Application permissions** → add `Mail.Send` → **Grant admin consent**.
+
+2. **Scope the app to exactly the mailbox(es) you intend** (critical)
+
+- **Preferred (modern)**: **RBAC for Applications in Exchange Online**. Assign an app role limited to a mailbox scope.
+- **Classic**: **Application Access Policy**. Create a **mail‑enabled security group**; add the allowed sender mailbox; bind the app to that group.
+
+### Classic: Application Access Policy (example)
+
+```powershell
+New-ApplicationAccessPolicy \
+  -AppId <YOUR-APP-CLIENT-ID> \
+  -PolicyScopeGroupId <MAIL-ENABLED-SEC-GROUP-ADDRESS> \
+  -AccessRight RestrictAccess \
+  -Description "Limit Graph Mail.Send to alerts mailbox"
+
+Test-ApplicationAccessPolicy \
+  -AppId <YOUR-APP-CLIENT-ID> \
+  -Identity alerts@yourdomain.com
+```
+
+---
+
+## Local configuration
+
+Create `/etc/graph-mail.env`:
+
+```ini
+TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+APPLICATION_ID=yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy
+CLIENT_SECRET=your-super-secret-value
+SENDER=alerts@yourdomain.com
+```
+
+Secure it:
+
+```bash
+sudo chown root:root /etc/graph-mail.env
+sudo chmod 600 /etc/graph-mail.env
+```
+
+---
+
+## Usage
+
+```bash
+echo "This is the email body." | mail -s "Test email from Linux" recipient@domain.com
+```
+
+```bash
+echo "Body" | mail -s "Hello" alice@domain.com bob@domain.com
+```
+
+Notes:
+
+- `-s` for subject is supported. Sender is fixed in `SENDER`. `-r` ignored.
+- Set `$ContentType = "HTML"` in `graph-mail.ps1` for HTML mail.
+- Set `saveToSentItems = true` in the JSON payload to save in Sent.
+
+---
+
+## Troubleshooting
+
+- `pwsh: command not found` → check install/symlink.
+- `401/403` → check admin consent, mailbox scope, and sender match.
+- No email → check spam/quarantine and sender's license/send rights.
+- Body/subject missing → ensure you provide `-s` and body via stdin.
+
