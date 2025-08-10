@@ -33,27 +33,11 @@ Send Microsoft 365 (Exchange Online) mail from a Linux box with **no local SMTP 
 
 ### A) Debian/Ubuntu on **amd64** (easy path)
 
-1. **Find latest PowerShell version**
+1. **Install PowerShell 7** from Microsoft’s repo
 
-```bash
-curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | grep tag_name
-```
+Refer to the [official installation documentation](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-linux)
 
-Note the latest version number (e.g. `v7.4.5`) and strip the leading `v` for use in the next step.
-
-2. **Install PowerShell 7** from Microsoft’s repo
-
-```bash
-sudo apt-get update
-sudo apt-get install -y wget apt-transport-https software-properties-common
-wget -q https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-sudo dpkg -i packages-microsoft-prod.deb
-sudo apt-get update
-sudo apt-get install -y powershell   # provides /usr/bin/pwsh
-pwsh --version
-```
-
-3. **Install the scripts**
+2. **Install the scripts**
 
 ```bash
 sudo curl -o /usr/local/bin/mail \
@@ -63,7 +47,7 @@ sudo curl -o /usr/local/bin/graph-mail.ps1 \
 sudo chmod +x /usr/local/bin/mail
 ```
 
-4. **Make it the default `mail`**
+3. **Make it the default `mail`**
 
 Remove/rename any existing `/usr/bin/mail` (from `mailutils`/`bsd-mailx`), then:
 
@@ -93,11 +77,11 @@ curl -L -o powershell-linux-arm64.tar.gz \
   https://github.com/PowerShell/PowerShell/releases/download/v$PWVER/powershell-$PWVER-linux-arm64.tar.gz
 ```
 
-3. **Install to /opt and link**
+3. **Install PowerShell to /opt and link**
 
 ```bash
 sudo mkdir -p /opt/microsoft/powershell/$PWVER
-sudo tar -xzf powershell-linux-arm64.tar.gz -C /opt/microsoft/powershell/$PWVER
+sudo tar -xzf powershell-$PWVER-linux-arm64.tar.gz -C /opt/microsoft/powershell/$PWVER
 sudo ln -sf /opt/microsoft/powershell/$PWVER/pwsh /usr/bin/pwsh
 pwsh --version
 ```
@@ -180,7 +164,7 @@ echo "Body" | mail -s "Hello" alice@domain.com bob@domain.com
 
 Notes:
 
-- `-s` for subject is supported. Sender is fixed in `SENDER`. `-r` ignored.
+- `-s` for subject is supported. Sender is fixed in the env file's `SENDER` variable. `-r` ignored.
 - Set `$ContentType = "HTML"` in `graph-mail.ps1` for HTML mail.
 - Set `saveToSentItems = true` in the JSON payload to save in Sent.
 
